@@ -1,0 +1,49 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+add_newline = true
+scan_timeout = 30
+command_timeout = 800
+palette = "miami_wind"
+
+# The whole top line comes from ~/.config/starship/bar.sh, which fits it to the terminal width.
+format = """${custom.bar}$line_break$character"""
+
+[custom.bar]
+shell = ["sh"]
+when = true
+command = 'sh "$HOME/.config/starship/bar.sh"'
+format = "$output"
+unsafe_no_escape = true
+
+[character]
+success_symbol = "[❯](bold fg:green)"
+error_symbol = "[❯](bold fg:red)"
+vimcmd_symbol = "[❮](bold fg:green)"
+vimcmd_replace_one_symbol = "[❮](bold fg:purple)"
+vimcmd_replace_symbol = "[❮](bold fg:purple)"
+vimcmd_visual_symbol = "[❮](bold fg:yellow)"
+
+[palettes.miami_wind]
+black = "#1e1e2e"
+surface0 = "#313244"
+surface1 = "#45475a"
+surface2 = "#585b70"
+overlay = "#7f849c"
+white = "#cdd6f4"
+subtext = "#bac2de"
+pink = "#f472b6"
+bright_pink = "#ec4899"
+cyan = "#22d3ee"
+bright_cyan = "#38bdf8"
+yellow = "#fef08a"
+bright_yellow = "#fde047"
+purple = "#c084fc"
+bright_purple = "#a78bfa"
+blue = "#818cf8"
+bright_blue = "#2563eb"
+green = "#34d399"
+bright_green = "#4ade80"
+red = "#f87171"
+bright_red = "#f43f5e"
+orange = "#fdba74"
+bright_orange = "#fb923c"
