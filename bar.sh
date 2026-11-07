@@ -5,15 +5,33 @@
 # line fits, so it never wraps at any width.
 
 # Measure characters, not bytes, whatever locale the shell was started with.
-export LC_ALL=C.UTF-8
+if locale -a 2>/dev/null | grep -qiE '^C\.utf-?8$'; then
+	export LC_ALL=C.UTF-8
+else
+	export LC_ALL=en_US.UTF-8
+fi
 
 # Starship gives custom commands neither the width, the last exit status nor its
 # duration; they exist only on the command line of the starship process that runs us.
 pid=$PPID
-while [ "${pid:-1}" -gt 1 ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" != starship ]; do
-	read -r _ _ _ pid _ <"/proc/$pid/stat" 2>/dev/null || pid=1
+while [ "${pid:-1}" -gt 1 ]; do
+	if [ -r "/proc/$pid/comm" ]; then
+		[ "$(cat "/proc/$pid/comm" 2>/dev/null)" = starship ] && break
+		read -r _ _ _ pid _ <"/proc/$pid/stat" 2>/dev/null || pid=1
+	else
+		info="$(ps -o ppid=,comm= -p "$pid" 2>/dev/null)" || break
+		read -r parent comm <<EOF
+$info
+EOF
+		[ "${comm##*/}" = starship ] && break
+		pid="$parent"
+	fi
 done
-args="$(tr '\0' '\n' <"/proc/$pid/cmdline" 2>/dev/null)"
+if [ -r "/proc/$pid/cmdline" ]; then
+	args="$(tr '\0' '\n' <"/proc/$pid/cmdline" 2>/dev/null)"
+else
+	args="$(ps -o args= -p "$pid" 2>/dev/null | tr '[:space:]' '\n')"
+fi
 arg() { printf '%s\n' "$args" | sed -n "s/^--$1=//p"; }
 status="$(arg status)"
 duration="$(arg cmd-duration)"
