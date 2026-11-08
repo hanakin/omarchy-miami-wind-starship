@@ -56,18 +56,29 @@ class PromptWidthTests(unittest.TestCase):
             # Hide only the renderer's /proc reads; Linux ps still needs /proc.
             source = (ROOT / 'bar.sh').read_text()
             (scripts / 'bar.sh').write_text(source.replace('/proc/', str(home / 'no-proc') + '/'))
-            for status in (0, 1):
+            binaries = home / 'bin'
+            binaries.mkdir()
+            ps = binaries / 'ps'
+            # Simulate BSD ps truncating redirected output unless -ww is used.
+            ps.write_text(f'#!/bin/sh\nif [ "$1" = -ww ]; then exec "{shutil.which("ps")}" "$@"; fi\n'
+                          f'"{shutil.which("ps")}" "$@" | cut -c1-79\n')
+            ps.chmod(0o755)
+            for status in (0, 127):
                 with self.subTest(status=status):
-                    bar = self.bar(home, home, 200, f'--status={status}',
-                                   '--cmd-duration=5000', MIAMI_WIND_COLS='')
+                    bar = self.bar(home, home, 200, '--keymap=viins', '--jobs=0', '--shlvl=1',
+                                   f'--status={status}', '--cmd-duration=5000', MIAMI_WIND_COLS='',
+                                   PATH=str(binaries) + os.pathsep + os.environ['PATH'])
                     self.assertEqual(len(bar), 200)
+                    self.assertEqual(' 127 ' in bar, status == 127)
                     self.assertIn(' 5s ', bar)
-                    self.assertEqual(' 1 ' in bar, status == 1)
 
     def test_locale_without_c_utf8(self):
         locales = subprocess.check_output(['locale', '-a'], text=True)
-        if not re.search(r'^en_US\.utf-?8$', locales, re.IGNORECASE | re.MULTILINE):
-            self.skipTest('needs en_US.UTF-8')
+        utf8 = [name for name in locales.splitlines() if re.search(r'\.utf-?8$', name, re.IGNORECASE)]
+        fallback = next((name for name in utf8 if not name.lower().startswith('c.')), None)
+        preferred = next((name for name in utf8 if name.lower().startswith('c.')), None)
+        if not fallback:
+            self.skipTest('needs a UTF-8 locale other than C.UTF-8')
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             (home / '.config').mkdir()
@@ -75,17 +86,23 @@ class PromptWidthTests(unittest.TestCase):
             binaries = home / 'bin'
             binaries.mkdir()
             locale = binaries / 'locale'
-            locale.write_text("#!/bin/sh\nprintf 'C\\nPOSIX\\nen_US.UTF-8\\n'\n")
-            locale.chmod(0o755)
             wc = binaries / 'wc'
             wc.write_text('#!/bin/sh\nprintf "%s\\n" "$LC_ALL" >> "$HOME/wc-locales"\n'
                           f'exec "{shutil.which("wc")}" "$@"\n')
             wc.chmod(0o755)
-            for width in (60, 200):
-                with self.subTest(width=width):
-                    self.assertEqual(len(self.bar(home, home, width,
-                                     PATH=str(binaries) + os.pathsep + os.environ['PATH'])), width)
-            self.assertEqual(set((home / 'wc-locales').read_text().splitlines()), {'en_US.UTF-8'})
+            choices = [(fallback, fallback)]
+            if preferred:
+                choices.append((fallback + '\n' + preferred, preferred))
+            for available, expected in choices:
+                locale.write_text("#!/bin/sh\nprintf '%s\\n' 'C' 'POSIX' '" + available + "'\n")
+                locale.chmod(0o755)
+                for width in (60, 200):
+                    with self.subTest(locale=expected, width=width):
+                        self.assertEqual(len(self.bar(home, home, width,
+                                         PATH=str(binaries) + os.pathsep + os.environ['PATH'])), width)
+                observed = home / 'wc-locales'
+                self.assertEqual(set(observed.read_text().splitlines()), {expected})
+                observed.unlink()
 
 
 if __name__ == '__main__':
